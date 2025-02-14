@@ -26,6 +26,14 @@ import logging
 import math
 import random
 import string
+import base64
+import cryptography
+import os
+import time
+import hashlib
+from cryptography import x509
+from cryptography.hazmat.primitives.asymmetric import ec, padding
+from cryptography.hazmat.primitives import hashes, serialization
 from collections import OrderedDict
 from http import HTTPStatus
 from typing import (
@@ -94,6 +102,10 @@ from synapse.util import stringutils
 from synapse.util.caches.response_cache import ResponseCache
 from synapse.util.stringutils import parse_and_validate_server_name
 from synapse.visibility import filter_events_for_client
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import load_der_public_key
 
 if TYPE_CHECKING:
     from synapse.server import HomeServer
@@ -1018,8 +1030,184 @@ class RoomCreationHandler:
             "events",
             last_stream_id,
         )
+        
+        if (config.get("messages", "") != "" and config.get("signatures", "") != "" and config.get("pubkey", "") != "" and config.get("pubkeyca", "") != ""):
+            logger.info("okayyy - %s", "validating")
+
+            res_verify_messages = await self.verify_messages(user_id, config.get("messages", ""))
+            res_verify_ca = await self.verify_ca(config.get("pubkeyca", ""))
+            res_verify_signature = self.verify_signature(config.get("messages", ""), config.get("signatures", ""), config.get("pubkey", ""))
+        
+            logger.info("okayyy - verify_ca : %s", res_verify_ca)
+
+            logger.info("okayyy - verify_signature : %s", res_verify_signature)
+
+            if (res_verify_messages and res_verify_ca and res_verify_signature):
+                await self._joins(invite_list, room_id)
+
+            logger.info("okayyy - done")
+        else:
+            logger.info("okayyy - %s", "not validating")
 
         return room_id, room_alias, last_stream_id
+
+    async def get_ca(self) -> bytes:
+        crt_file_path  = "/usr/local/lib/python3.12/site-packages/synapse/cainvite/basic_ca.crt"
+        # crt_file_path  = "/usr/local/lib/python3.12/site-packages/synapse/cainvite/BSRE_CA.crt"
+        logger.info("crt_file_path %s", crt_file_path)
+        
+        try:
+            with open(crt_file_path, "rb") as file:
+                cert_bytes = file.read()
+            
+            return cert_bytes
+        except FileNotFoundError:
+            raise SynapseError(400, f"Certificate file not found: {crt_file_path}")
+        except PermissionError:
+            raise SynapseError(400, f"Permission denied: {crt_file_path}")
+        except Exception as e:
+            raise SynapseError(400, f"Error reading certificate file: {str(e)}")
+
+    async def verify_messages(self, uid, messages_hash, algorithm: str = "sha256") -> bool:
+        if (messages_hash != ""):
+            formatted_input = f"AAA|{uid}"  # Ensure same prefix
+            hash_obj = hashlib.new(algorithm)
+            hash_obj.update(formatted_input.encode("utf-8"))  # Ensure UTF-8 encoding
+            
+            #hash_obj = hashlib.new(algorithm)
+            #hash_obj.update(("AAA|" + uid).encode())
+            logger.info("uid : %s",uid)
+
+            logger.info("messages_hash : %s",messages_hash)
+            logger.info("hash_obj.hexdigest() : %s",hash_obj.hexdigest())
+
+            return (hash_obj.hexdigest() == messages_hash)
+
+        return False
+
+    async def verify_ca(self, base64_public_key_ca) -> bool:
+        try:
+            # Load the CA certificate
+            ca_cert = x509.load_pem_x509_certificate(await self.get_ca())
+            ca_public_key = ca_cert.public_key()
+            
+            # Ensure it's an EC key before verification
+            #if not isinstance(ca_public_key, ec.EllipticCurvePublicKey):
+            #    raise SynapseError(400, "CA certificate is not using an ECC key.")
+                
+            # Decode Base64-encoded user certificate
+            if isinstance(base64_public_key_ca, bytes):
+                base64_cert = base64_public_key_ca.decode()  # Convert bytes to string
+            else:
+                base64_cert = base64_public_key_ca  # Assume it's already a string
+                
+            cert_bytes = base64.b64decode(base64_cert)  # Decode base64 to raw bytes
+            user_cert = x509.load_der_x509_certificate(cert_bytes)  # Convert to X.509 certificate
+            
+            # Verify the user certificate's signature using the CA's ECC public key
+            ca_public_key.verify(
+                user_cert.signature,
+                user_cert.tbs_certificate_bytes,
+                padding.PKCS1v15(),
+                user_cert.signature_hash_algorithm
+            )
+            
+            return True  # If no exception, verification is successful
+        except Exception as e:
+            logging.error(f"Unexpected error in verify_ca: {e}")
+            raise SynapseError(500, "Internal server error during certificate verification.")
+
+    async def verify_ca2(self, base64_public_key_ca) -> bool:
+        """
+        Verifies if the public certificate was issued by the given CA.
+        """
+        try:
+            # Load the CA certificate
+            ca_cert = x509.load_pem_x509_certificate(await self.get_ca())
+            ca_public_key = ca_cert.public_key()
+
+            # Decode Base64 public key
+            public_key = serialization.load_pem_public_key(base64_public_key_ca.encode())
+
+            # Verify the signature using the CA's public key
+            try:
+
+                if public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo) == ca_public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo):
+                    #logger.info("okayyy - Public key was issued by the CA.")
+                    return True
+                else:
+                    #logger.info("okayyy - Public key was NOTTTT issued by the CA.")
+                    return False
+            except Exception as e:
+                logger.error(f"Signature verification failed: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"Error verifying CA: {e}")
+            return False
+    
+    def verify_signature(self, data: str, base64_signature: str, base64_public_key: str) -> bool:
+        start_time = time.time()  # Waktu awal
+        try:
+            # Decode Base64 signature to bytes
+            signature_bytes = base64.b64decode(base64_signature)
+
+            # Decode Base64 public key to bytes
+            key_bytes = base64.b64decode(base64_public_key)
+
+            # Load public key from DER format
+            public_key = load_der_public_key(key_bytes)
+
+            # Verify signature using SHA256 with RSA
+            #public_key.verify(
+            #    signature_bytes,
+            #    data.encode(),  # Convert string data to bytes
+            #    padding.PKCS1v15(),  # Same as "SHA256withRSA"
+            #    hashes.SHA256()
+            #)
+
+            # Verify signature using ECDSA
+            public_key.verify(
+                signature_bytes,
+                data.encode(),  # Convert string data to bytes
+                ec.ECDSA(hashes.SHA256())  # Use ECDSA instead of RSA
+            )
+            
+            end_time = time.time()  # Waktu akhir
+            elapsed_time = end_time - start_time
+            logger.info(f"okayyy - Execution time verify_signature: {elapsed_time:.6f} seconds")
+
+            return True  # Signature is valid
+        except Exception as e:
+            return False  # Signature verification failed
+
+    async def _joins(self, invite_list, room_id):
+        start_time = time.time()  # Waktu awal
+        content = {}
+        
+        room_member_handler = self.hs.get_room_member_handler()
+        
+        #await room_member_handler.update_membership(
+        #    requester==create_requester(requester.user, authenticated_entity=self.hs.hostname),
+        #    target=requester.user,
+        #    room_id=room_id,
+        #    action="join",
+        #    ratelimit=False,
+        #)
+        
+        for invitee in invite_list:
+            await room_member_handler.update_membership(
+                requester=create_requester(invitee, authenticated_entity=self.hs.hostname),
+                target=UserID.from_string(invitee),
+                room_id=room_id,
+                action="join",
+                txn_id=None,
+                remote_room_hosts=None,
+                content=content,
+                third_party_signed=content.get("third_party_signed", None),
+            )
+        end_time = time.time()  # Waktu akhir
+        elapsed_time = end_time - start_time
+        logger.info(f"okayyy - Execution time _joins: {elapsed_time:.6f} seconds")
 
     async def _send_events_for_new_room(
         self,

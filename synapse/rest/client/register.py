@@ -58,7 +58,7 @@ from synapse.http.servlet import (
 from synapse.http.site import SynapseRequest
 from synapse.metrics import threepid_send_requests
 from synapse.push.mailer import Mailer
-from synapse.types import JsonDict
+from synapse.types import JsonDict, create_requester
 from synapse.util.msisdn import phone_number_to_msisdn
 from synapse.util.ratelimitutils import FederationRateLimiter
 from synapse.util.stringutils import assert_valid_client_secret, random_string
@@ -443,6 +443,7 @@ class RegisterRestServlet(RestServlet):
         self._registration_flows = _calculate_registration_flows(
             hs.config, self.auth_handler
         )
+        self.deactivate_account_handler = hs.get_deactivate_account_handler()
 
     @interactive_auth_handler
     async def on_POST(self, request: SynapseRequest) -> Tuple[int, JsonDict]:
@@ -762,6 +763,10 @@ class RegisterRestServlet(RestServlet):
                     approval_notice_medium=ApprovalNoticeMedium.NONE,
                 )
 
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account(registered_user_id, erase_data=False, requester=create_requester(registered_user_id))
+        return_dict.update({"deactived": results})
+
         return 200, return_dict
 
     async def _do_appservice_registration(
@@ -837,6 +842,10 @@ class RegisterRestServlet(RestServlet):
             if refresh_token is not None:
                 result["refresh_token"] = refresh_token
 
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account(user_id, erase_data=False, requester=create_requester(user_id))
+        result.update({"deactived": results})
+
         return result
 
     async def _do_guest_registration(
@@ -874,6 +883,10 @@ class RegisterRestServlet(RestServlet):
 
         if refresh_token is not None:
             result["refresh_token"] = refresh_token
+
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account(user_id, erase_data=False, requester=create_requester(user_id))
+        result.update({"deactived": results})
 
         return 200, result
 
