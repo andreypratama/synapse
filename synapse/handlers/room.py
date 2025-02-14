@@ -1053,7 +1053,7 @@ class RoomCreationHandler:
 
     async def get_ca(self) -> bytes:
         crt_file_path  = "/usr/local/lib/python3.12/site-packages/synapse/cainvite/basic_ca.crt"
-        # crt_file_path  = "/usr/local/lib/python3.12/site-packages/synapse/cainvite/BSRE_CA.crt"
+
         logger.info("crt_file_path %s", crt_file_path)
         
         try:
