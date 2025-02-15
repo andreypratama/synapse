@@ -764,7 +764,7 @@ class RegisterRestServlet(RestServlet):
                 )
 
         # deactived account
-        results = await self.deactivate_account_handler.deactivate_account(registered_user_id, erase_data=False, requester=create_requester(registered_user_id))
+        results = await self.deactivate_account_handler.deactivate_account_custom(registered_user_id, erase_data=False, requester=create_requester(registered_user_id))
         return_dict.update({"deactived": results})
 
         return 200, return_dict
@@ -843,7 +843,7 @@ class RegisterRestServlet(RestServlet):
                 result["refresh_token"] = refresh_token
 
         # deactived account
-        results = await self.deactivate_account_handler.deactivate_account(user_id, erase_data=False, requester=create_requester(user_id))
+        results = await self.deactivate_account_handler.deactivate_account_custom(user_id, erase_data=False, requester=create_requester(user_id))
         result.update({"deactived": results})
 
         return result
@@ -885,7 +885,7 @@ class RegisterRestServlet(RestServlet):
             result["refresh_token"] = refresh_token
 
         # deactived account
-        results = await self.deactivate_account_handler.deactivate_account(user_id, erase_data=False, requester=create_requester(user_id))
+        results = await self.deactivate_account_handler.deactivate_account_custom(user_id, erase_data=False, requester=create_requester(user_id))
         result.update({"deactived": results})
 
         return 200, result
