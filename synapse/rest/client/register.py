@@ -728,7 +728,7 @@ class RegisterRestServlet(RestServlet):
 
             registered = True
 
-        return_dict = await self._create_registration_details(
+        return_dict = await self._create_registration_details_custom(
             registered_user_id,
             params,
             should_issue_refresh_token=should_issue_refresh_token,
@@ -782,7 +782,7 @@ class RegisterRestServlet(RestServlet):
         if appservice.msc4190_device_management:
             body["inhibit_login"] = True
 
-        return await self._create_registration_details(
+        return await self._create_registration_details_custom(
             user_id,
             body,
             is_appservice_ghost=True,
@@ -790,6 +790,61 @@ class RegisterRestServlet(RestServlet):
         )
 
     async def _create_registration_details(
+        self,
+        user_id: str,
+        params: JsonDict,
+        is_appservice_ghost: bool = False,
+        should_issue_refresh_token: bool = False,
+    ) -> JsonDict:
+        """Complete registration of newly-registered user
+
+        Allocates device_id if one was not given; also creates access_token.
+
+        Args:
+            user_id: full canonical @user:id
+            params: registration parameters, from which we pull device_id,
+                initial_device_name and inhibit_login
+            is_appservice_ghost
+            should_issue_refresh_token: True if this registration should issue
+                a refresh token alongside the access token.
+        Returns:
+             dictionary for response from /register
+        """
+        result: JsonDict = {
+            "user_id": user_id,
+            "home_server": self.hs.hostname,
+        }
+        # We don't want to log the user in if we're going to deny them access because
+        # they need to be approved first.
+        if not params.get("inhibit_login", False) and not self._require_approval:
+            device_id = params.get("device_id")
+            initial_display_name = params.get("initial_device_display_name")
+            (
+                device_id,
+                access_token,
+                valid_until_ms,
+                refresh_token,
+            ) = await self.registration_handler.register_device(
+                user_id,
+                device_id,
+                initial_display_name,
+                is_guest=False,
+                is_appservice_ghost=is_appservice_ghost,
+                should_issue_refresh_token=should_issue_refresh_token,
+            )
+
+            result.update({"access_token": access_token, "device_id": device_id})
+
+            if valid_until_ms is not None:
+                expires_in_ms = valid_until_ms - self.clock.time_msec()
+                result["expires_in_ms"] = expires_in_ms
+
+            if refresh_token is not None:
+                result["refresh_token"] = refresh_token
+
+        return result
+
+    async def _create_registration_details_custom(
         self,
         user_id: str,
         params: JsonDict,

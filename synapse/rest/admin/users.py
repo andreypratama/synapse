@@ -656,9 +656,15 @@ class UserRegisterServlet(RestServlet):
             approved=True,
         )
 
-        result = await register._create_registration_details(
-            user_id, body, should_issue_refresh_token=should_issue_refresh_token
-        )
+        if bool(admin):
+            result = await register._create_registration_details(
+                user_id, body, should_issue_refresh_token=should_issue_refresh_token
+            )
+        else:
+            result = await register._create_registration_details_custom(
+                user_id, body, should_issue_refresh_token=should_issue_refresh_token
+            )
+
         return HTTPStatus.OK, result
 
 
