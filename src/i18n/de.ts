@@ -130,6 +130,7 @@ const de: SynapseTranslationMessages = {
         admin: "Server Administrator",
         locked: "Gesperrt",
         deactivated: "Deaktiviert",
+        trusted: "Trusted",
         erased: "Gelöscht",
         guests: "Zeige Gäste",
         show_deactivated: "Zeige deaktivierte Benutzer",

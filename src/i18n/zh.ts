@@ -126,6 +126,7 @@ const zh: SynapseTranslationMessages = {
         is_guest: "访客",
         admin: "服务器管理员",
         deactivated: "被禁用",
+        trusted: "Trusted",
         guests: "显示访客",
         show_deactivated: "显示被禁用的账户",
         user_id: "搜索用户",

@@ -122,6 +122,7 @@ const fr: SynapseTranslationMessages = {
         admin: "Administrateur du serveur",
         locked: "Verrouillé",
         deactivated: "Désactivé",
+        trusted: "Trusted",
         guests: "Afficher les visiteurs",
         show_deactivated: "Afficher les utilisateurs désactivés",
         user_id: "Rechercher un utilisateur",

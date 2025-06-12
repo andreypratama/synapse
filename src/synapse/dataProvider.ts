@@ -111,6 +111,7 @@ interface User {
   is_guest: 0 | 1;
   admin: 0 | 1;
   deactivated: 0 | 1;
+  trusted: 0 | 1;
   erased: boolean;
   shadow_banned: 0 | 1;
   creation_ts: number;
@@ -235,6 +236,7 @@ const resourceMap = {
       is_guest: !!u.is_guest,
       admin: !!u.admin,
       deactivated: !!u.deactivated,
+      trusted: !!u.trusted,
       // need timestamp in milliseconds
       creation_ts_ms: u.creation_ts * 1000,
     }),
@@ -498,7 +500,7 @@ function getSearchOrder(order: "ASC" | "DESC") {
 const dataProvider: SynapseDataProvider = {
   getList: async (resource, params) => {
     console.log("getList " + resource);
-    const { user_id, name, guests, deactivated, locked, search_term, destination, valid } = params.filter;
+    const { user_id, name, guests, deactivated, trusted, locked, search_term, destination, valid } = params.filter;
     const { page, perPage } = params.pagination as PaginationPayload;
     const { field, order } = params.sort as SortPayload;
     const from = (page - 1) * perPage;
@@ -511,6 +513,7 @@ const dataProvider: SynapseDataProvider = {
       destination: destination,
       guests: guests,
       deactivated: deactivated,
+      trusted: trusted,
       locked: locked,
       valid: valid,
       order_by: field,

@@ -124,6 +124,7 @@ export const UserList = (props: ListProps) => (
       <BooleanField source="is_guest" />
       <BooleanField source="admin" />
       <BooleanField source="deactivated" />
+      <BooleanField source="trusted" />
       <BooleanField source="locked" />
       <BooleanField source="erased" sortable={false} />
       <DateField source="creation_ts" label="resources.users.fields.creation_ts_ms" showTime options={DATE_FORMAT} />
@@ -213,6 +214,7 @@ export const UserEdit = (props: EditProps) => {
           <BooleanInput source="admin" />
           <BooleanInput source="locked" />
           <BooleanInput source="deactivated" helperText="resources.users.helper.deactivate" />
+          <BooleanInput source="trusted" />
           <BooleanInput source="erased" disabled />
           <DateField source="creation_ts_ms" showTime options={DATE_FORMAT} />
           <TextField source="consent_version" />

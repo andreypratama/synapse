@@ -37,6 +37,7 @@ interface ImportLine {
   user_type?: string;
   name?: string;
   deactivated?: boolean;
+  trusted?: boolean;
   guest?: boolean;
   admin?: boolean;
   is_admin?: boolean;
@@ -139,6 +140,7 @@ const FilePicker = () => {
       is_guest: 0,
       admin: 0,
       deactivated: 0,
+      trusted: 0,
       password: 0,
       avatar_url: 0,
       id: 0,

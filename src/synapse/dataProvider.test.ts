@@ -24,6 +24,7 @@ describe("dataProvider", () => {
             admin: 0,
             user_type: null,
             deactivated: 0,
+            trusted: 0,
             displayname: "User One",
           },
           {
@@ -33,6 +34,7 @@ describe("dataProvider", () => {
             admin: 1,
             user_type: null,
             deactivated: 0,
+            trusted: 0,
             displayname: "User Two",
           },
         ],
@@ -71,6 +73,7 @@ describe("dataProvider", () => {
         avatar_url: "mxc://localhost/user1",
         admin: false,
         deactivated: false,
+        trusted: false,
       })
     );
 

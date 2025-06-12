@@ -138,6 +138,7 @@ const ru: SynapseTranslationMessages = {
         admin: "Администратор сервера",
         locked: "Заблокирован",
         deactivated: "Деактивирован",
+        trusted: "Trusted",
         erased: "Удалён",
         guests: "Показывать гостей",
         show_deactivated: "Показывать деактивированных",

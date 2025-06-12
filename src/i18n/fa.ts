@@ -118,6 +118,7 @@ const fa: SynapseTranslationMessages = {
         is_guest: "مهمان",
         admin: "مدیر سرور",
         deactivated: "غیرفعال",
+        trusted: "Trusted",
         guests: "نمایش مهمانان",
         show_deactivated: "نمایش کاربران غیرفعال شده",
         user_id: "جستجوی کاربر",
