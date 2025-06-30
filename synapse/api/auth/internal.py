@@ -301,3 +301,14 @@ class InternalAuth(BaseAuth):
             True if the user is an admin
         """
         return await self.store.is_server_admin(requester.user)
+
+    async def is_trusted_user(self, requester: Requester) -> bool:
+        """Check if the given user is a trusted user.
+
+        Args:
+            requester: The user making the request, according to the access token.
+
+        Returns:
+            True if the user is an trusted user
+        """
+        return await self.store.is_trusted_user(requester.user)

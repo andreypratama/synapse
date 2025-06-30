@@ -537,6 +537,25 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
 
         return bool(res) if res else False
 
+    async def is_trusted_user(self, user: UserID) -> bool:
+        """Determines if a user is an trusted user of this homeserver.
+
+        Args:
+            user: user ID of the user to test
+
+        Returns:
+            true iff the user is a trusted user, false otherwise.
+        """
+        res = await self.db_pool.simple_select_one_onecol(
+            table="users",
+            keyvalues={"name": user.to_string()},
+            retcol="trusted",
+            allow_none=True,
+            desc="is_trusted_user",
+        )
+
+        return bool(res) if res else False
+
     async def set_server_admin(self, user: UserID, admin: bool) -> None:
         """Sets whether a user is an admin of this homeserver.
 

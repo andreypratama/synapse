@@ -1031,23 +1031,31 @@ class RoomCreationHandler:
             last_stream_id,
         )
         
-        if (config.get("messages", "") != "" and config.get("signatures", "") != "" and config.get("pubkey", "") != "" and config.get("pubkeyca", "") != ""):
-            logger.info("okayyy - %s", "validating")
+        # make auto join
+        # if trusted user
+        is_trusted_user = await self.auth.is_trusted_user(requester)
 
-            res_verify_messages = await self.verify_messages(user_id, config.get("messages", ""))
-            res_verify_ca = await self.verify_ca(config.get("pubkeyca", ""))
-            res_verify_signature = self.verify_signature(config.get("messages", ""), config.get("signatures", ""), config.get("pubkey", ""))
-        
-            logger.info("okayyy - verify_ca : %s", res_verify_ca)
-
-            logger.info("okayyy - verify_signature : %s", res_verify_signature)
-
-            if (res_verify_messages and res_verify_ca and res_verify_signature):
-                await self._joins(invite_list, room_id)
-
-            logger.info("okayyy - done")
+        if is_trusted_user:
+            await self._joins(invite_list, room_id)
         else:
-            logger.info("okayyy - %s", "not validating")
+            # if not trusted then check cert user
+            if (config.get("messages", "") != "" and config.get("signatures", "") != "" and config.get("pubkey", "") != "" and config.get("pubkeyca", "") != ""):
+                #logger.info("okayyy - %s", "validating")
+
+                res_verify_messages = await self.verify_messages(user_id, config.get("messages", ""))
+                res_verify_ca = await self.verify_ca(config.get("pubkeyca", ""))
+                res_verify_signature = self.verify_signature(config.get("messages", ""), config.get("signatures", ""), config.get("pubkey", ""))
+        
+                #logger.info("okayyy - verify_ca : %s", res_verify_ca)
+
+                #logger.info("okayyy - verify_signature : %s", res_verify_signature)
+
+                if (res_verify_messages and res_verify_ca and res_verify_signature):
+                    await self._joins(invite_list, room_id)
+
+                #logger.info("okayyy - done")
+            #else:
+                #logger.info("okayyy - %s", "not validating")
 
         return room_id, room_alias, last_stream_id
 
@@ -1133,10 +1141,10 @@ class RoomCreationHandler:
             try:
 
                 if public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo) == ca_public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo):
-                    #logger.info("okayyy - Public key was issued by the CA.")
+                    ##logger.info("okayyy - Public key was issued by the CA.")
                     return True
                 else:
-                    #logger.info("okayyy - Public key was NOTTTT issued by the CA.")
+                    ##logger.info("okayyy - Public key was NOTTTT issued by the CA.")
                     return False
             except Exception as e:
                 logger.error(f"Signature verification failed: {e}")

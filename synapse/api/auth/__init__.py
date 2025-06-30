@@ -148,6 +148,16 @@ class Auth(Protocol):
             True if the user is an admin
         """
 
+    async def is_trusted_user(self, requester: Requester) -> bool:
+        """Check if the given user is a trusted user.
+
+        Args:
+            requester: user to check
+
+        Returns:
+            True if the user is an trusted user
+        """
+
     async def check_can_change_room_list(
         self, room_id: str, requester: Requester
     ) -> bool:
