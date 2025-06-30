@@ -951,6 +951,7 @@ CREATE TABLE users (
     consent_server_notice_sent text,
     user_type text,
     deactivated smallint DEFAULT 0 NOT NULL,
+    trusted smallint DEFAULT 0 NOT NULL,
     shadow_banned boolean,
     consent_ts bigint
 );
