@@ -237,7 +237,7 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                     deactivated, COALESCE(shadow_banned, FALSE) AS shadow_banned,
                     COALESCE(approved, TRUE) AS approved,
                     COALESCE(locked, FALSE) AS locked,
-                    suspended
+                    suspended, trusted
                 FROM users
                 WHERE name = ?
                 """,
@@ -263,6 +263,7 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                 approved,
                 locked,
                 suspended,
+                trusted
             ) = row
 
             return UserInfo(
@@ -280,6 +281,7 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                 approved=bool(approved),
                 locked=bool(locked),
                 suspended=bool(suspended),
+                is_trusted=bool(trusted),
             )
 
         return await self.db_pool.runInteraction(
@@ -1178,6 +1180,27 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
             keyvalues={"name": user_id},
             retcol="locked",
             desc="get_user_locked_status",
+        )
+
+        # Convert the potential integer into a boolean.
+        return bool(res)
+
+    @cached()
+    async def get_user_trusted_status(self, user_id: str) -> bool:
+        """Retrieve the value for the `trusted` property for the provided user.
+
+        Args:
+            user_id: The ID of the user to retrieve the status for.
+
+        Returns:
+            True if the user was trusted, false if the user is still active.
+        """
+
+        res = await self.db_pool.simple_select_one_onecol(
+            table="users",
+            keyvalues={"name": user_id},
+            retcol="trusted",
+            desc="get_user_trusted_status",
         )
 
         # Convert the potential integer into a boolean.
@@ -2289,6 +2312,33 @@ class RegistrationBackgroundUpdateStore(RegistrationWorkerStore):
             updatevalues={"locked": locked},
         )
         self._invalidate_cache_and_stream(txn, self.get_user_locked_status, (user_id,))
+        self._invalidate_cache_and_stream(txn, self.get_user_by_id, (user_id,))
+
+    async def set_user_trusted_status(self, user_id: str, trusted: bool) -> None:
+        """Set the `trusted` property for the provided user to the provided value.
+
+        Args:
+            user_id: The ID of the user to set the status for.
+            trusted: The value to set for `trusted`.
+        """
+
+        await self.db_pool.runInteraction(
+            "set_user_trusted_status",
+            self.set_user_trusted_status_txn,
+            user_id,
+            trusted,
+        )
+
+    def set_user_trusted_status_txn(
+        self, txn: LoggingTransaction, user_id: str, trusted: bool
+    ) -> None:
+        self.db_pool.simple_update_one_txn(
+            txn=txn,
+            table="users",
+            keyvalues={"name": user_id},
+            updatevalues={"trusted": 1 if trusted else 0},
+        )
+        self._invalidate_cache_and_stream(txn, self.get_user_trusted_status, (user_id,))
         self._invalidate_cache_and_stream(txn, self.get_user_by_id, (user_id,))
 
     def update_user_approval_status_txn(

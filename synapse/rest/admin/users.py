@@ -80,6 +80,7 @@ class UsersRestServletV2(RestServlet):
     The parameter `order_by` can be used to order the result.
     The parameter `not_user_type` can be used to exclude certain user types.
     The parameter `locked` can be used to include locked users.
+    The parameter `trusted` can be used to include trusted users.
     Possible values are `bot`, `support` or "empty string".
     "empty string" here means to exclude users without a type.
     """
@@ -120,6 +121,8 @@ class UsersRestServletV2(RestServlet):
         else:
             approved = True
 
+        trusted = parse_boolean(request, "trusted", default=False)
+
         order_by = parse_string(
             request,
             "order_by",
@@ -136,6 +139,7 @@ class UsersRestServletV2(RestServlet):
                 UserSortOrder.CREATION_TS.value,
                 UserSortOrder.LAST_SEEN_TS.value,
                 UserSortOrder.LOCKED.value,
+                UserSortOrder.TRUSTED.value,
             ),
         )
 
@@ -158,6 +162,7 @@ class UsersRestServletV2(RestServlet):
             approved,
             not_user_types,
             locked,
+            trusted,
         )
 
         # If support for MSC3866 is not enabled, don't show the approval flag.
@@ -300,6 +305,12 @@ class UserRestServletV2(RestServlet):
                 "'logout_devices' parameter is not of type boolean",
             )
 
+        truste = body.get("trusted", False)
+        if not isinstance(truste, bool):
+            raise SynapseError(
+                HTTPStatus.BAD_REQUEST, "'trusted' parameter is not of type boolean"
+            )
+
         deactivate = body.get("deactivated", False)
         if not isinstance(deactivate, bool):
             raise SynapseError(
@@ -413,6 +424,12 @@ class UserRestServletV2(RestServlet):
                     logout_devices,
                     requester,
                 )
+
+            if "trusted" in body:
+                if truste and not user["trusted"]:
+                    await self.store.set_user_trusted_status(user_id, True)
+                elif not truste and user["trusted"]:
+                    await self.store.set_user_trusted_status(user_id, False)
 
             if "deactivated" in body:
                 if deactivate and not user["deactivated"]:

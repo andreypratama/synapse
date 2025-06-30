@@ -109,6 +109,7 @@ class UserPaginateResponse:
     erased: bool
     last_seen_ts: int
     locked: bool
+    trusted: bool
 
 
 class DataStore(
@@ -187,6 +188,7 @@ class DataStore(
         approved: bool = True,
         not_user_types: Optional[List[str]] = None,
         locked: bool = False,
+        trusted: Optional[bool] = None,
     ) -> Tuple[List[UserPaginateResponse], int]:
         """Function to retrieve a paginated list of users from
         users list. This will return a json list of users and the
@@ -207,6 +209,7 @@ class DataStore(
             approved: whether to include approved users
             not_user_types: list of user types to exclude
             locked: whether to include locked users
+            trusted: whether to include trusted users
         Returns:
             A tuple of a list of mappings from user to information and a count of total users.
         """
@@ -309,7 +312,7 @@ class DataStore(
             sql = f"""
                 SELECT name, user_type, is_guest, admin, deactivated, shadow_banned,
                 displayname, avatar_url, creation_ts * 1000 as creation_ts, approved,
-                eu.user_id is not null as erased, last_seen_ts, locked
+                eu.user_id is not null as erased, last_seen_ts, locked, trusted
                 {sql_base}
                 ORDER BY {order_by_column} {order}, u.name ASC
                 LIMIT ? OFFSET ?
@@ -331,6 +334,7 @@ class DataStore(
                     erased=bool(row[10]),
                     last_seen_ts=row[11],
                     locked=bool(row[12]),
+                    trusted=bool(row[13]),
                 )
                 for row in txn
             ]

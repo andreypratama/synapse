@@ -1350,6 +1350,7 @@ class UserInfo:
         approved: If the user has been "approved" to register on the server.
         locked: Whether the user's account has been locked
         suspended: Whether the user's account is currently suspended
+        is_trusted:  True if the user has been trusted.
     """
 
     user_id: UserID
@@ -1366,6 +1367,7 @@ class UserInfo:
     approved: bool
     locked: bool
     suspended: bool
+    is_trusted: bool
 
 
 class UserProfile(TypedDict):
