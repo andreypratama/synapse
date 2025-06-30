@@ -175,6 +175,8 @@ class RoomCreateRestServlet(TransactionRestServlet):
     async def _do(
         self, request: SynapseRequest, requester: Requester
     ) -> Tuple[int, JsonDict]:
+        #logger.info("WEIRDS - %s",request)
+        #logger.info("WEIRDS - %s",self.get_room_config(request))
         room_id, _, _ = await self._room_creation_handler.create_room(
             requester, self.get_room_config(request)
         )
@@ -528,6 +530,12 @@ class JoinRoomAliasServlet(ResolveRoomIdMixin, TransactionRestServlet):
             remote_room_hosts,
         )
 
+        logger.info("wwww - %s", content)
+        logger.info("wwww - args - %s", request.args)
+        logger.info("wwww - txn_id - %s", txn_id)
+        logger.info("wwww - remote_room_hosts - %s", remote_room_hosts)
+        logger.info("wwww - requester - %s", requester)
+
         await self.room_member_handler.update_membership(
             requester=requester,
             target=requester.user,
@@ -783,9 +791,9 @@ class RoomMessageListRestServlet(RestServlet):
         # decorator on `get_number_joined_users_in_room` doesn't play well with
         # the type system. Maybe in the future, it can use some ParamSpec
         # wizardry to fix it up.
-        room_member_count_deferred = run_in_background(  # type: ignore[call-overload]
+        room_member_count_deferred = run_in_background(  # type: ignore[call-arg]
             self.store.get_number_joined_users_in_room,
-            room_id,
+            room_id,  # type: ignore[arg-type]
         )
 
         requester = await self.auth.get_user_by_req(request, allow_guest=True)

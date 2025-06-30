@@ -62,6 +62,140 @@ class DeactivateAccountHandler:
             hs.config.account_validity.account_validity_enabled
         )
 
+    async def deactivate_account_custom(
+        self,
+        user_id: str,
+        erase_data: bool,
+        requester: Requester,
+        id_server: Optional[str] = None,
+        by_admin: bool = False,
+    ) -> bool:
+        """Deactivate a user's account
+
+        Args:
+            user_id: ID of user to be deactivated
+            erase_data: whether to GDPR-erase the user's data
+            requester: The user attempting to make this change.
+            id_server: Use the given identity server when unbinding
+                any threepids. If None then will attempt to unbind using the
+                identity server specified when binding (if known).
+            by_admin: Whether this change was made by an administrator.
+
+        Returns:
+            True if identity server supports removing threepids, otherwise False.
+        """
+
+        # This can only be called on the main process.
+        assert isinstance(self._device_handler, DeviceHandler)
+
+        # Check if this user can be deactivated
+        if not await self._third_party_rules.check_can_deactivate_user(
+            user_id, by_admin
+        ):
+            raise SynapseError(
+                403, "Deactivation of this user is forbidden", Codes.FORBIDDEN
+            )
+
+        # FIXME: Theoretically there is a race here wherein user resets
+        # password using threepid.
+
+        # delete threepids first. We remove these from the IS so if this fails,
+        # leave the user still active so they can try again.
+        # Ideally we would prevent password resets and then do this in the
+        # background thread.
+
+        # This will be set to false if the identity server doesn't support
+        # unbinding
+        identity_server_supports_unbinding = True
+
+        # Attempt to unbind any known bound threepids to this account from identity
+        # server(s).
+        bound_threepids = await self.store.user_get_bound_threepids(user_id)
+        for medium, address in bound_threepids:
+            try:
+                result = await self._identity_handler.try_unbind_threepid(
+                    user_id, medium, address, id_server
+                )
+            except Exception:
+                # Do we want this to be a fatal error or should we carry on?
+                logger.exception("Failed to remove threepid from ID server")
+                raise SynapseError(400, "Failed to remove threepid from ID server")
+
+            identity_server_supports_unbinding &= result
+
+        # Remove any local threepid associations for this account.
+        local_threepids = await self.store.user_get_threepids(user_id)
+        for local_threepid in local_threepids:
+            await self._auth_handler.delete_local_threepid(
+                user_id, local_threepid.medium, local_threepid.address
+            )
+
+        # delete any devices belonging to the user, which will also
+        # delete corresponding access tokens.
+        await self._device_handler.delete_all_devices_for_user(user_id)
+        # then delete any remaining access tokens which weren't associated with
+        # a device.
+        await self._auth_handler.delete_access_tokens_for_user(user_id)
+
+        #await self.store.user_set_password_hash(user_id, None)
+
+        # Most of the pushers will have been deleted when we logged out the
+        # associated devices above, but we still need to delete pushers not
+        # associated with devices, e.g. email pushers.
+        await self.store.delete_all_pushers_for_user(user_id)
+
+        # Add the user to a table of users pending deactivation (ie.
+        # removal from all the rooms they're a member of)
+        await self.store.add_user_pending_deactivation(user_id)
+
+        # delete from user directory
+        await self.user_directory_handler.handle_local_user_deactivated(user_id)
+
+        # Mark the user as erased, if they asked for that
+        if erase_data:
+            user = UserID.from_string(user_id)
+            # Remove avatar URL from this user
+            await self._profile_handler.set_avatar_url(
+                user, requester, "", by_admin, deactivation=True
+            )
+            # Remove displayname from this user
+            await self._profile_handler.set_displayname(
+                user, requester, "", by_admin, deactivation=True
+            )
+
+            logger.info("Marking %s as erased", user_id)
+            await self.store.mark_user_erased(user_id)
+
+        # Now start the process that goes through that list and
+        # parts users from rooms (if it isn't already running)
+        self._start_user_parting()
+
+        # Reject all pending invites and knocks for the user, so that the
+        # user doesn't show up in the "invited" section of rooms' members list.
+        await self._reject_pending_invites_and_knocks_for_user(user_id)
+
+        # Remove all information on the user from the account_validity table.
+        if self._account_validity_enabled:
+            await self.store.delete_account_validity_for_user(user_id)
+
+        # Mark the user as deactivated.
+        await self.store.set_user_deactivated_status(user_id, True)
+
+        # Remove account data (including ignored users and push rules).
+        await self.store.purge_account_data_for_user(user_id)
+
+        # Delete any server-side backup keys
+        await self.store.bulk_delete_backup_keys_and_versions_for_user(user_id)
+
+        # Let modules know the user has been deactivated.
+        await self._third_party_rules.on_user_deactivation_status_changed(
+            user_id,
+            True,
+            by_admin,
+        )
+
+        return identity_server_supports_unbinding
+
     async def deactivate_account(
         self,
         user_id: str,

@@ -58,7 +58,7 @@ from synapse.http.servlet import (
 from synapse.http.site import SynapseRequest
 from synapse.metrics import threepid_send_requests
 from synapse.push.mailer import Mailer
-from synapse.types import JsonDict
+from synapse.types import JsonDict, create_requester
 from synapse.util.msisdn import phone_number_to_msisdn
 from synapse.util.ratelimitutils import FederationRateLimiter
 from synapse.util.stringutils import assert_valid_client_secret, random_string
@@ -443,6 +443,7 @@ class RegisterRestServlet(RestServlet):
         self._registration_flows = _calculate_registration_flows(
             hs.config, self.auth_handler
         )
+        self.deactivate_account_handler = hs.get_deactivate_account_handler()
 
     @interactive_auth_handler
     async def on_POST(self, request: SynapseRequest) -> Tuple[int, JsonDict]:
@@ -727,7 +728,7 @@ class RegisterRestServlet(RestServlet):
 
             registered = True
 
-        return_dict = await self._create_registration_details(
+        return_dict = await self._create_registration_details_custom(
             registered_user_id,
             params,
             should_issue_refresh_token=should_issue_refresh_token,
@@ -762,6 +763,10 @@ class RegisterRestServlet(RestServlet):
                     approval_notice_medium=ApprovalNoticeMedium.NONE,
                 )
 
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account_custom(registered_user_id, erase_data=False, requester=create_requester(registered_user_id))
+        return_dict.update({"deactived": results})
+
         return 200, return_dict
 
     async def _do_appservice_registration(
@@ -777,7 +782,7 @@ class RegisterRestServlet(RestServlet):
         if appservice.msc4190_device_management:
             body["inhibit_login"] = True
 
-        return await self._create_registration_details(
+        return await self._create_registration_details_custom(
             user_id,
             body,
             is_appservice_ghost=True,
@@ -839,6 +844,65 @@ class RegisterRestServlet(RestServlet):
 
         return result
 
+    async def _create_registration_details_custom(
+        self,
+        user_id: str,
+        params: JsonDict,
+        is_appservice_ghost: bool = False,
+        should_issue_refresh_token: bool = False,
+    ) -> JsonDict:
+        """Complete registration of newly-registered user
+
+        Allocates device_id if one was not given; also creates access_token.
+
+        Args:
+            user_id: full canonical @user:id
+            params: registration parameters, from which we pull device_id,
+                initial_device_name and inhibit_login
+            is_appservice_ghost
+            should_issue_refresh_token: True if this registration should issue
+                a refresh token alongside the access token.
+        Returns:
+             dictionary for response from /register
+        """
+        result: JsonDict = {
+            "user_id": user_id,
+            "home_server": self.hs.hostname,
+        }
+        # We don't want to log the user in if we're going to deny them access because
+        # they need to be approved first.
+        if not params.get("inhibit_login", False) and not self._require_approval:
+            device_id = params.get("device_id")
+            initial_display_name = params.get("initial_device_display_name")
+            (
+                device_id,
+                access_token,
+                valid_until_ms,
+                refresh_token,
+            ) = await self.registration_handler.register_device(
+                user_id,
+                device_id,
+                initial_display_name,
+                is_guest=False,
+                is_appservice_ghost=is_appservice_ghost,
+                should_issue_refresh_token=should_issue_refresh_token,
+            )
+
+            result.update({"access_token": access_token, "device_id": device_id})
+
+            if valid_until_ms is not None:
+                expires_in_ms = valid_until_ms - self.clock.time_msec()
+                result["expires_in_ms"] = expires_in_ms
+
+            if refresh_token is not None:
+                result["refresh_token"] = refresh_token
+
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account_custom(user_id, erase_data=False, requester=create_requester(user_id))
+        result.update({"deactived": results})
+
+        return result
+
     async def _do_guest_registration(
         self, params: JsonDict, address: Optional[str] = None
     ) -> Tuple[int, JsonDict]:
@@ -874,6 +938,10 @@ class RegisterRestServlet(RestServlet):
 
         if refresh_token is not None:
             result["refresh_token"] = refresh_token
+
+        # deactived account
+        results = await self.deactivate_account_handler.deactivate_account_custom(user_id, erase_data=False, requester=create_requester(user_id))
+        result.update({"deactived": results})
 
         return 200, result
 
