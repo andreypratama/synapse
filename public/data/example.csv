@@ -1,3 +1,0 @@
-id,displayname,password,is_guest,admin,deactivated,trusted
-testuser22,Jane Doe,secretpassword,false,true,false,true
-,John Doe,,false,false,false,false
