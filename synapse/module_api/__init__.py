@@ -1846,6 +1846,30 @@ class ModuleApi:
             deactivation=deactivation,
         )
 
+    async def generate_new_pin(
+        self,
+        user_id: UserID,
+        requester: Requester,
+        new_pin_user: int,
+    ) -> None:
+        """Generates a user's new pin.
+
+        Added in Synapse v1.76.0.
+
+        Args:
+            user_id:
+                The user whose display name is to be changed.
+            new_pin_user:
+                The new pin user
+        """
+        requester = create_requester(user_id)
+        await self._hs.get_profile_handler().generate_new_pin(
+            target_user=user_id,
+            requester=requester,
+            new_pin_user=new_pin_user,
+            by_admin=True,
+        )
+
 
 class PublicRoomListManager:
     """Contains methods for adding to, removing from and querying whether a room

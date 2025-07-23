@@ -404,7 +404,7 @@ class ProfileWorkerStore(SQLBaseStore):
         await self.db_pool.runInteraction(
             "set_profile_displayname", set_profile_displayname
         )
-
+        
     async def set_profile_avatar_url(
         self, user_id: UserID, new_avatar_url: Optional[str]
     ) -> None:

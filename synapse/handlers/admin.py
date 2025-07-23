@@ -126,6 +126,8 @@ class AdminHandler:
             "is_guest": user_info.is_guest,
             "suspended": user_info.suspended,
             "trusted": user_info.is_trusted,
+            "new_pin": user_info.new_pin,
+            "created_new_pin": user_info.created_new_pin,
         }
 
         if self._msc3866_enabled:

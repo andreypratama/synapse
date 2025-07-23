@@ -100,6 +100,8 @@ class UserSortOrder(Enum):
     SHADOW_BANNED = ordered by `shadow_banned`
     CREATION_TS = ordered by `creation_ts`
     TRUSTED = ordered by `trusted`
+    NEW_PIN = ordered by `new_pin`
+    CREATED_NEW_PIN= ordered by `created_new_pin`
     """
 
     MEDIA_LENGTH = "media_length"
@@ -117,6 +119,8 @@ class UserSortOrder(Enum):
     LAST_SEEN_TS = "last_seen_ts"
     LOCKED = "locked"
     TRUSTED = "trusted"
+    NEW_PIN = "new_pin"
+    CREATED_NEW_PIN = "created_new_pin"
 
 
 class StatsStore(StateDeltasStore):

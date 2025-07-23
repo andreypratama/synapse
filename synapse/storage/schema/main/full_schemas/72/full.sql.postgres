@@ -953,7 +953,9 @@ CREATE TABLE users (
     deactivated smallint DEFAULT 0 NOT NULL,
     shadow_banned boolean,
     consent_ts bigint,
-    trusted smallint DEFAULT 0 NOT NULL
+    trusted smallint DEFAULT 0 NOT NULL,
+    new_pin text,
+    created_new_pin text
 );
 CREATE TABLE users_in_public_rooms (
     user_id text NOT NULL,

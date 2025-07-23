@@ -18,6 +18,7 @@
 # [This file includes modifications made by New Vector Limited]
 #
 #
+import random
 import hashlib
 import hmac
 import logging
@@ -81,6 +82,8 @@ class UsersRestServletV2(RestServlet):
     The parameter `not_user_type` can be used to exclude certain user types.
     The parameter `locked` can be used to include locked users.
     The parameter `trusted` can be used to include trusted users.
+    The parameter `new_pin` can be used to include new_pin users.
+    The parameter `created_new_pin` can be used to include created_new_pin users.
     Possible values are `bot`, `support` or "empty string".
     "empty string" here means to exclude users without a type.
     """
@@ -123,6 +126,10 @@ class UsersRestServletV2(RestServlet):
 
         trusted = parse_boolean(request, "trusted", default=False)
 
+        new_pin = parse_string(request, "new_pin")
+
+        created_new_pin = parse_string(request, "created_new_pin")
+
         order_by = parse_string(
             request,
             "order_by",
@@ -140,6 +147,8 @@ class UsersRestServletV2(RestServlet):
                 UserSortOrder.LAST_SEEN_TS.value,
                 UserSortOrder.LOCKED.value,
                 UserSortOrder.TRUSTED.value,
+                UserSortOrder.NEW_PIN.value,
+                UserSortOrder.CREATED_NEW_PIN.value,
             ),
         )
 
@@ -163,6 +172,8 @@ class UsersRestServletV2(RestServlet):
             not_user_types,
             locked,
             trusted,
+            new_pin,
+            created_new_pin,
         )
 
         # If support for MSC3866 is not enabled, don't show the approval flag.
@@ -305,11 +316,23 @@ class UserRestServletV2(RestServlet):
                 "'logout_devices' parameter is not of type boolean",
             )
 
-        truste = body.get("trusted", False)
-        if not isinstance(truste, bool):
+        trust = body.get("trusted", False)
+        if not isinstance(trust, bool):
             raise SynapseError(
                 HTTPStatus.BAD_REQUEST, "'trusted' parameter is not of type boolean"
             )
+
+        #newpin = body.get("new_pin", None)
+        #if newpin is not None:
+        #    raise SynapseError(
+        #        HTTPStatus.BAD_REQUEST, "'new_pin' parameter is not of type string"
+        #    )
+
+        #creatednewpin = body.get("created_new_pin", None)
+        #if creatednewpin is not None:
+        #    raise SynapseError(
+        #        HTTPStatus.BAD_REQUEST, "'created_new_pin' parameter is not of type string"
+        #    )
 
         deactivate = body.get("deactivated", False)
         if not isinstance(deactivate, bool):
@@ -426,10 +449,16 @@ class UserRestServletV2(RestServlet):
                 )
 
             if "trusted" in body:
-                if truste and not user["trusted"]:
+                if trust and not user["trusted"]:
                     await self.store.set_user_trusted_status(user_id, True)
-                elif not truste and user["trusted"]:
+                elif not trust and user["trusted"]:
                     await self.store.set_user_trusted_status(user_id, False)
+
+            #if "new_pin" is not None:
+            #    await self.store.set_user_trusted_status(user_id, True)
+
+            #if "created_new_pin" is not None:
+            #    await self.store.set_user_trusted_status(user_id, True)
 
             if "deactivated" in body:
                 if deactivate and not user["deactivated"]:
@@ -523,6 +552,65 @@ class UserRestServletV2(RestServlet):
             assert user_info_dict is not None
 
             return HTTPStatus.CREATED, user_info_dict
+
+class GeneratePinRestServletV2(RestServlet):
+    PATTERNS = admin_patterns("/users/generate_pin/(?P<user_id>[^/]*)$", "v2")
+
+    """Post request to allow an administrator to generate pin.
+    This needs user to have administrator access in Synapse.
+    We use POST since we already know the id of the user
+    object to create. POST could be used to create guests.
+
+    POST /_synapse/admin/v2/users/generate_pin/<user_id>
+
+    returns:
+        200 OK with modified user object if user was modified
+        otherwise an error.
+    """
+
+    def __init__(self, hs: "HomeServer"):
+        self.hs = hs
+        self.auth = hs.get_auth()
+        self.admin_handler = hs.get_admin_handler()
+        self.store = hs.get_datastores().main
+        self.auth_handler = hs.get_auth_handler()
+        self.profile_handler = hs.get_profile_handler()
+        self.set_password_handler = hs.get_set_password_handler()
+        self.deactivate_account_handler = hs.get_deactivate_account_handler()
+        self.registration_handler = hs.get_registration_handler()
+        self.pusher_pool = hs.get_pusherpool()
+        self._msc3866_enabled = hs.config.experimental.msc3866.enabled
+
+    async def on_GET(
+        self, request: SynapseRequest, user_id: str
+    ) -> Tuple[int, JsonMapping]:
+        requester = await self.auth.get_user_by_req(request)
+        await assert_user_is_admin(self.auth, requester)
+
+        target_user = UserID.from_string(user_id)
+
+        user = await self.admin_handler.get_user(target_user)
+        user_id = target_user.to_string()
+
+
+        if user:  # modify user
+            
+            new_pin_user = random.randint(100000, 999999)
+
+            await self.store.generate_new_pin(
+                user_id, new_pin_user
+            )
+
+            user = await self.admin_handler.get_user(target_user)
+            assert user is not None
+
+            return HTTPStatus.OK, user
+
+        else:
+            raise SynapseError(
+                HTTPStatus.BAD_REQUEST,
+                "'user_id' is required",
+            )
 
 
 class UserRegisterServlet(RestServlet):

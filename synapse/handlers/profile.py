@@ -238,7 +238,7 @@ class ProfileHandler:
 
         if propagate:
             await self._update_join_states(requester, target_user)
-
+            
     async def get_avatar_url(self, target_user: UserID) -> Optional[str]:
         """
         Fetch a user's avatar URL from their profile.

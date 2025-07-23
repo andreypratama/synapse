@@ -1351,6 +1351,8 @@ class UserInfo:
         locked: Whether the user's account has been locked
         suspended: Whether the user's account is currently suspended
         is_trusted:  True if the user has been trusted.
+        new_pin:  True if the user has been new_pin.
+        created_new_pin:  True if the user has been created_new_pin.
     """
 
     user_id: UserID
@@ -1368,6 +1370,8 @@ class UserInfo:
     locked: bool
     suspended: bool
     is_trusted: bool
+    new_pin: str
+    created_new_pin: str
 
 
 class UserProfile(TypedDict):

@@ -237,7 +237,7 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                     deactivated, COALESCE(shadow_banned, FALSE) AS shadow_banned,
                     COALESCE(approved, TRUE) AS approved,
                     COALESCE(locked, FALSE) AS locked,
-                    suspended, trusted
+                    suspended, trusted, new_pin, created_new_pin
                 FROM users
                 WHERE name = ?
                 """,
@@ -263,7 +263,9 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                 approved,
                 locked,
                 suspended,
-                trusted
+                trusted,
+                new_pin,
+                created_new_pin
             ) = row
 
             return UserInfo(
@@ -282,6 +284,8 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
                 locked=bool(locked),
                 suspended=bool(suspended),
                 is_trusted=bool(trusted),
+                new_pin=new_pin,
+                created_new_pin=created_new_pin,
             )
 
         return await self.db_pool.runInteraction(
@@ -1199,6 +1203,27 @@ class RegistrationWorkerStore(CacheInvalidationWorkerStore):
             keyvalues={"name": user_id},
             retcol="locked",
             desc="get_user_locked_status",
+        )
+
+        # Convert the potential integer into a boolean.
+        return bool(res)
+
+    @cached()
+    async def get_user_new_pin(self, user_id: str) -> bool:
+        """Retrieve the value for the `new_pin` property for the provided user.
+
+        Args:
+            user_id: The ID of the user to retrieve the status for.
+
+        Returns:
+            True if the user was trusted, false if the user is still active.
+        """
+
+        res = await self.db_pool.simple_select_one_onecol(
+            table="users",
+            keyvalues={"name": user_id},
+            retcol="new_pin",
+            desc="get_user_new_pin",
         )
 
         # Convert the potential integer into a boolean.
@@ -2331,6 +2356,33 @@ class RegistrationBackgroundUpdateStore(RegistrationWorkerStore):
             updatevalues={"locked": locked},
         )
         self._invalidate_cache_and_stream(txn, self.get_user_locked_status, (user_id,))
+        self._invalidate_cache_and_stream(txn, self.get_user_by_id, (user_id,))
+
+    async def generate_new_pin(self, user_id: str, new_pin: str) -> None:
+        """Set the `new_pin` property for the provided user to the provided value.
+
+        Args:
+            user_id: The ID of the user to set the status for.
+            new_pin: The value to set for `new_pin`.
+        """
+
+        await self.db_pool.runInteraction(
+            "generate_new_pin",
+            self.generate_new_pin_txn,
+            user_id,
+            new_pin,
+        )
+
+    def generate_new_pin_txn(
+        self, txn: LoggingTransaction, user_id: str, new_pin: str
+    ) -> None:
+        self.db_pool.simple_update_one_txn(
+            txn=txn,
+            table="users",
+            keyvalues={"name": user_id},
+            updatevalues={"new_pin": new_pin},
+        )
+        self._invalidate_cache_and_stream(txn, self.get_user_new_pin, (user_id,))
         self._invalidate_cache_and_stream(txn, self.get_user_by_id, (user_id,))
 
     async def set_user_trusted_status(self, user_id: str, trusted: bool) -> None:
