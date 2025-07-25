@@ -57,6 +57,57 @@ def _read_propagate(hs: "HomeServer", request: SynapseRequest) -> bool:
     return propagate
 
 
+class ProfilePinRestServlet(RestServlet):
+    PATTERNS = client_patterns("/profile/(?P<user_id>[^/]*)/newpin", v1=True)
+    CATEGORY = "Event sending requests"
+
+    def __init__(self, hs: "HomeServer"):
+        super().__init__()
+        self.hs = hs
+        self.profile_handler = hs.get_profile_handler()
+        self.auth = hs.get_auth()
+
+    async def on_POST(
+        self, request: SynapseRequest, user_id: str
+    ) -> Tuple[int, JsonDict]:
+        if not UserID.is_valid(user_id):
+            raise SynapseError(
+                HTTPStatus.BAD_REQUEST, "Invalid user id", Codes.INVALID_PARAM
+            )
+
+        requester = await self.auth.get_user_by_req(request, allow_guest=True)
+        user = UserID.from_string(user_id)
+        is_admin = await self.auth.is_server_admin(requester)
+
+        content = parse_json_object_from_request(request)
+
+        try:
+            newpin = content["newpin"]
+        except Exception:
+            raise SynapseError(
+                400, "Missing key 'newpin'", errcode=Codes.MISSING_PARAM
+            )
+
+        propagate = _read_propagate(self.hs, request)
+
+        newpinValue = await self.profile_handler.get_newpin(user)
+
+        if (newpin == newpinValue):
+            await self.profile_handler.set_newpin(
+                user, requester, "", is_admin, propagate=propagate
+            )
+            
+            ret = {}
+            if newpinValue is not None:
+                ret["newpin"] = newpinValue
+            
+            return 200, ret
+        else:
+            raise SynapseError(
+                400, "Your New Pin is not Right!", errcode=Codes.MISSING_PARAM
+            )
+
+
 class ProfileDisplaynameRestServlet(RestServlet):
     PATTERNS = client_patterns("/profile/(?P<user_id>[^/]*)/displayname", v1=True)
     CATEGORY = "Event sending requests"
@@ -416,6 +467,7 @@ class UnstableProfileFieldRestServlet(RestServlet):
 def register_servlets(hs: "HomeServer", http_server: HttpServer) -> None:
     # The specific displayname / avatar URL / custom field endpoints *must* appear
     # before their corresponding generic profile endpoint.
+    ProfilePinRestServlet(hs).register(http_server)
     ProfileDisplaynameRestServlet(hs).register(http_server)
     ProfileAvatarURLRestServlet(hs).register(http_server)
     ProfileRestServlet(hs).register(http_server)

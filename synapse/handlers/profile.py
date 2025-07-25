@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MAX_PIN_LEN = 6
 MAX_DISPLAYNAME_LEN = 256
 MAX_AVATAR_URL_LEN = 1000
 # Field name length is specced at 255 bytes.
@@ -234,6 +235,100 @@ class ProfileHandler:
 
         await self._third_party_rules.on_profile_update(
             target_user.to_string(), profile, by_admin, deactivation
+        )
+
+        if propagate:
+            await self._update_join_states(requester, target_user)
+
+    async def get_newpin(self, target_user: UserID) -> Optional[str]:
+        """
+        Fetch a user's newpin from their profile.
+
+        Args:
+            target_user: The user to fetch the newpin of.
+
+        Returns:
+            The user's newpin or None if unset.
+        """
+        if self.hs.is_mine(target_user):
+            try:
+                newpin = await self.store.get_profile_newpin(target_user)
+            except StoreError as e:
+                if e.code == 404:
+                    raise SynapseError(404, "Profile was not found", Codes.NOT_FOUND)
+                raise
+
+            return newpin
+        else:
+            try:
+                result = await self.federation.make_query(
+                    destination=target_user.domain,
+                    query_type="users",
+                    args={"name": target_user.to_string(), "field": "newpin"},
+                    ignore_backoff=True,
+                )
+            except RequestSendFailed as e:
+                raise SynapseError(502, "Failed to fetch profile") from e
+            except HttpResponseException as e:
+                raise e.to_synapse_error()
+
+            return result.get("displayname")
+
+    async def set_newpin(
+        self,
+        target_user: UserID,
+        requester: Requester,
+        newpin: str,
+        by_admin: bool = False,
+        propagate: bool = True,
+    ) -> None:
+        """Set the newpin of a user
+
+        Args:
+            target_user: the user whose newpin is to be changed.
+            requester: The user attempting to make this change.
+            newpin: The new pin to give this user.
+            by_admin: Whether this change was made by an administrator.
+            propagate: Whether this change also applies to the user's membership events.
+        """
+        if not self.hs.is_mine(target_user):
+            raise SynapseError(400, "User is not hosted on this homeserver")
+
+        if not by_admin and target_user != requester.user:
+            raise AuthError(400, "Cannot set another user's new pin")
+
+        if not isinstance(newpin, str):
+            raise SynapseError(
+                400, "'newpin' must be a string", errcode=Codes.INVALID_PARAM
+            )
+
+        if len(newpin) > MAX_PIN_LEN:
+            raise SynapseError(
+                400, "New Pin is too long (max %i)" % (MAX_PIN_LEN,)
+            )
+
+        newpin_to_set: Optional[str] = newpin.strip()
+        if newpin == "":
+            newpin_to_set = None
+
+        # If the admin changes the display name of a user, the requesting user cannot send
+        # the join event to update the display name in the rooms.
+        # This must be done by the target user themselves.
+        if by_admin:
+            requester = create_requester(
+                target_user,
+                authenticated_entity=requester.authenticated_entity,
+            )
+
+        await self.store.set_profile_newpin(target_user, newpin_to_set)
+
+        profile = await self.store.get_profileinfo(target_user)
+        await self.user_directory_handler.handle_local_profile_change(
+            target_user.to_string(), profile
+        )
+
+        await self._third_party_rules.on_profile_update(
+            target_user.to_string(), profile, by_admin, False
         )
 
         if propagate:

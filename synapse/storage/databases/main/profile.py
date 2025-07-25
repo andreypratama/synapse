@@ -193,6 +193,23 @@ class ProfileWorkerStore(SQLBaseStore):
             desc="get_profile_displayname",
         )
 
+    async def get_profile_newpin(self, user_id: UserID) -> Optional[str]:
+        """
+        Fetch the display name of a user.
+
+        Args:
+            user_id: The user to get the display name for.
+
+        Raises:
+            404 if the user does not exist.
+        """
+        return await self.db_pool.simple_select_one_onecol(
+            table="users",
+            keyvalues={"name": user_id.to_string()},
+            retcol="new_pin",
+            desc="get_profile_newpin",
+        )
+
     async def get_profile_avatar_url(self, user_id: UserID) -> Optional[str]:
         """
         Fetch the avatar URL of a user.
@@ -403,6 +420,36 @@ class ProfileWorkerStore(SQLBaseStore):
 
         await self.db_pool.runInteraction(
             "set_profile_displayname", set_profile_displayname
+        )
+
+    async def set_profile_newpin(
+        self, user_id: UserID, newpin: Optional[str]
+    ) -> None:
+        """
+        Set the new pin of a user.
+
+        Args:
+            user_id: The user's ID.
+            newpin: The new pin. If this is None, the user's new pin is removed.
+        """
+
+        def set_profile_newpin(txn: LoggingTransaction) -> None:
+            if newpin is not None:
+                self._check_profile_size(
+                    txn, user_id, ProfileFields.NEWPIN, newpin
+                )
+
+            self.db_pool.simple_upsert_txn(
+                txn,
+                table="users",
+                keyvalues={"name": user_id.to_string()},
+                values={
+                    "new_pin": newpin,
+                },
+            )
+
+        await self.db_pool.runInteraction(
+            "set_profile_newpin", set_profile_newpin
         )
         
     async def set_profile_avatar_url(

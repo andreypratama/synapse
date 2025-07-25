@@ -324,4 +324,5 @@ class Direction(enum.Enum):
 
 class ProfileFields:
     DISPLAYNAME: Final = "displayname"
+    NEWPIN: Final = "newpin"
     AVATAR_URL: Final = "avatar_url"
